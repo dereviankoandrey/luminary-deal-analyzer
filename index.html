@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Luminary Deal Analyzer — Deterministic Underwriting</title>
+<title>Luminary Deal Analyzer — Deterministic Underwriting Engine</title>
 <style>
 :root {
   --bg: #0a0c12;
@@ -227,33 +227,18 @@ function analyze() {
   // Expenses
   const effectiveRent = rent * (1 - vacancyPct);
   const mgmtCost = rent * mgmtPct;
-  const annualExpenses = (mortgage + tax + insurance + maintenance + mgmtCost) * 12;
+  const annualExpenses = (mortgage + tax/12 + insurance/12 + maintenance + mgmtCost) * 12;
   const annualIncome = rent * 12;
-  const annualNOI = annualIncome - annualExpenses + mortgage * 12; // NOI before debt service
+  const annualNOI = annualIncome - ((tax + insurance + maintenance + mgmtCost) * 12);
 
   // Metrics
   const totalCashInvested = price * downPct + closing;
   const capRate = (annualNOI / price) * 100;
-  const cashOnCash = ((annualNOI - annualExpenses + mortgage * 12 - mortgage * 12) / totalCashInvested) * 100; // NOI after debt service
-
-  // Recalculate properly: cash flow = rent - all expenses including mortgage
-  const monthlyExpenses = mortgage + tax/12 + insurance/12 + maintenance + mgmtCost;
-  const monthlyCF = effectiveRent - monthlyExpenses;
+  const monthlyCF = effectiveRent - mortgage - tax/12 - insurance/12 - maintenance - mgmtCost;
   const annualCashFlow = monthlyCF * 12;
   const cocReturn = (annualCashFlow / totalCashInvested) * 100;
-
-  // DSCR
-  const dscr = (annualNOI) / (mortgage * 12);
-
-  // Gross Rent Multiplier
+  const dscr = annualNOI / (mortgage * 12);
   const grim = price / annualIncome;
-
-  // Equity multiple over 5 years
-  let totalCashIn5y = 0;
-  for (let y = 0; y < 5; y++) {
-    totalCashIn5y += annualCashFlow * Math.pow(1 + escalationPct, y);
-  }
-  const equityMultiple = 1 + (totalCashIn5y / totalCashInvested);
 
   // ========== RISK FLAGS ==========
   const flags = [];
@@ -267,8 +252,8 @@ function analyze() {
   if (dscr < 1.25) flags.push({ text: `DSCR ${dscr.toFixed(2)}x is below 1.25x lender minimum`, type: 'warn' });
   else flags.push({ text: `DSCR ${dscr.toFixed(2)}x meets lender requirements`, type: 'ok' });
 
-  if (grimm > 10) flags.push({ text: `GRM ${grimm.toFixed(1)} is above 10 — potentially overpriced for rent levels`, type: 'warn' });
-  else flags.push({ text: `GRM ${grimm.toFixed(1)} within acceptable range`, type: 'ok' });
+  if (grim > 10) flags.push({ text: `GRM ${grim.toFixed(1)} is above 10 — potentially overpriced for rent levels`, type: 'warn' });
+  else flags.push({ text: `GRM ${grim.toFixed(1)} within acceptable range`, type: 'ok' });
 
   if (monthlyCF < 200) flags.push({ text: `Monthly cash flow only $${monthlyCF.toFixed(0)} — thin margin for error`, type: 'warn' });
   else flags.push({ text: `Monthly cash flow $${monthlyCF.toFixed(0)} provides adequate cushion`, type: 'ok' });
@@ -294,7 +279,7 @@ function analyze() {
     <div class="metric-card"><div class="value" style="color:${cocReturn>=8?'var(--green)':'var(--amber)'}">${cocReturn.toFixed(2)}%</div><div class="label">Cash-on-Cash</div></div>
     <div class="metric-card"><div class="value" style="color:${dscr>=1.25?'var(--green)':'var(--red)'}">${dscr.toFixed(2)}x</div><div class="label">DSCR</div></div>
     <div class="metric-card"><div class="value">$${monthlyCF.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div class="label">Monthly Cash Flow</div></div>
-    <div class="metric-card"><div class="value">${grimm.toFixed(1)}</div><div class="label">Gross Rent Multiplier</div></div>
+    <div class="metric-card"><div class="value">${grim.toFixed(1)}</div><div class="label">Gross Rent Multiplier</div></div>
     <div class="metric-card"><div class="value">$${totalCashInvested.toLocaleString()}</div><div class="label">Total Cash Invested</div></div>
   `;
 
@@ -313,7 +298,7 @@ function analyze() {
     const yrMaint = maintenance * 12 * Math.pow(1.025, y);
     const yrMgmt = rent * mgmtPct * 12;
     const yrExpenses = yrMortgage + yrTax + yrInsurance + yrMaint + yrMgmt;
-    const yrNOI = yrIncome - (yrTax + yrInsurance + yrMaint + yrMgmt); // NOI before DS
+    const yrNOI = yrIncome - (yrTax + yrInsurance + yrMaint + yrMgmt);
     const yrCF = yrIncome - yrExpenses;
     projHTML += `<tr><td>${y+1}</td><td>$${Math.round(yrRent).toLocaleString()}</td><td>$${Math.round(yrIncome).toLocaleString()}</td><td>$${Math.round(yrExpenses).toLocaleString()}</td><td>$${Math.round(yrNOI).toLocaleString()}</td><td style="color:${yrCF>=0?'var(--green)':'var(--red)'}">$${Math.round(yrCF).toLocaleString()}</td></tr>`;
   }
